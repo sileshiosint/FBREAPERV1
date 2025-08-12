@@ -18,6 +18,7 @@ public class Comment {
     private String timestamp;
     private String language;
     private String sentiment;
+    private String postId;
 
     private String createdTime;
     public String getCreatedTime() {
@@ -94,5 +95,13 @@ public class Comment {
 
     public void setSentiment(String sentiment) {
         this.sentiment = sentiment;
+    }
+
+    public String getPostId() {
+        return postId;
+    }
+
+    public void setPostId(String postId) {
+        this.postId = postId;
     }
 }

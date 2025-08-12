@@ -51,9 +51,7 @@ public class ScraperService {
         status.put("startTime", startTime != null ? startTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : null);
         status.put("estimatedCompletion", calculateEstimatedCompletion());
         
-        // Mock errors for now
-        Map<String, Object>[] errors = new Map[0];
-        status.put("errors", errors);
+        status.put("errors", java.util.Collections.emptyList());
         
         return status;
     }
