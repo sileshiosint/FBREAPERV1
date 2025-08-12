@@ -54,7 +54,7 @@ services:
 
   backend:
     build: ./backend-java
-    container_name: fbreaper-backend
+    container_name: fbreaperv1-backend
     depends_on:
       - kafka
       - neo4j
@@ -69,16 +69,32 @@ services:
     networks:
       - fbreaper-network
 
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: fbreaper-libretranslate
+    environment:
+      - LT_LOAD_ONLY=en
+      - LT_PORT=5000
+    ports:
+      - "5001:5000"
+    networks:
+      - fbreaper-network
+
   scraper:
     build: ./python_scraper
     container_name: fbreaper-scraper
     depends_on:
       - kafka
+      - libretranslate
     environment:
       - KAFKA_BROKER=kafka:9092
       - KAFKA_SCRAPE_TOPIC=fbreaper-topic
       - KAFKA_COMMANDS_TOPIC=scraper-control
-      - LIBRETRANSLATE_URL=http://libretranslate:5001/translate
+      - LIBRETRANSLATE_URL=http://libretranslate:5000/translate
+      - HEADLESS=true
+      - DEFAULT_MAX_POSTS=10
+    volumes:
+      - ./python_scraper/fb_session:/app/fb_session
     networks:
       - fbreaper-network
 

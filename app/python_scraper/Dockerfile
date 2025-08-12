@@ -8,5 +8,5 @@ COPY . .
 ENV KAFKA_BROKER=localhost:9092 \
     KAFKA_SCRAPE_TOPIC=fbreaper-topic \
     KAFKA_COMMANDS_TOPIC=scraper-control \
-    LIBRETRANSLATE_URL=http://libretranslate:5001/translate
+    LIBRETRANSLATE_URL=http://libretranslate:5000/translate
 CMD ["python", "main.py"]

@@ -4,7 +4,7 @@ A production-ready, containerized OSINT system for Facebook data collection, enr
 - Frontend: Vite + React served by Nginx
 - Backend: Java Spring Boot (Web, Security, Kafka, Neo4j)
 - Scraper: Python Playwright + NLP (langdetect, spaCy, VADER) + Kafka
-- Infra: Kafka + Zookeeper, Neo4j
+- Infra: Kafka + Zookeeper, Neo4j, LibreTranslate (optional but included)
 
 All services are orchestrated with Docker Compose. The backend exposes REST APIs consumed by the frontend. The scraper streams enriched data to Kafka; the backend consumes and persists to Neo4j.
 
@@ -59,7 +59,7 @@ All services are orchestrated with Docker Compose. The backend exposes REST APIs
   5. Scraper navigates to relevant pages/results and simulates human-like actions (scrolling, expanding, delays).
   6. Scraper extracts posts, comments, authors, timestamps, URLs, reactions.
   7. NLP pipeline runs: language detection, sentiment, hashtag extraction, basic NER; optional translation via LibreTranslate.
-  8. Scraper produces enriched JSON records to `fbreaper-topic` (keyed by postId when available).
+  8. Scraper produces enriched JSON records to `fbreaper-topic` (keyed by `postId`).
   9. Backend Kafka consumer ingests messages, validates/normalizes payloads.
   10. Backend upserts nodes/relationships in Neo4j (posts, comments, hashtags, links).
   11. Frontend polls or requests data from REST endpoints to render tables, stats, and graphs.
@@ -69,56 +69,25 @@ All services are orchestrated with Docker Compose. The backend exposes REST APIs
   2. Backend queries Neo4j repositories and returns DTOs.
   3. Frontend renders lists, details, and graph visualizations (D3-ready shapes provided by backend endpoints).
 
-## Sequence Diagrams
-
-Scrape by keyword:
-```text
-User → Frontend: click "Scrape"
-Frontend → Backend: POST /api/scraper/scrapeByKeyword?keyword=... 
-Backend → Kafka(scraper-control): { action: "scrapeByKeyword", keyword }
-Scraper → Kafka(scraper-control): consume command
-Scraper → Facebook: navigate, scroll, expand, collect
-Scraper → NLP: detect lang, sentiment, hashtags, NER, translate (optional)
-Scraper → Kafka(fbreaper-topic): produce {type: POST|COMMENT, payload}
-Backend → Kafka(fbreaper-topic): consume
-Backend → Neo4j: upsert nodes/relationships
-Frontend → Backend: GET /api/data/posts
-Backend → Frontend: 200 JSON (DTOs)
-```
-
-Data fetch & render:
-```text
-Frontend → Backend: GET /api/network/graph?keyword=...
-Backend → Neo4j: run queries (nodes/relationships)
-Backend → Frontend: 200 JSON (D3-ready graph)
-Frontend: render graph visualization
-```
-
 ## Data Contracts
 
-- Kafka messages from scraper (example):
+- Kafka messages from scraper (actual format):
 ```json
 {
-  "type": "POST",
-  "payload": {
-    "postId": "1234567890",
-    "author": "John Doe",
-    "content": "Post content ...",
-    "timestamp": "2024-05-01T12:34:56Z",
-    "language": "en",
-    "sentiment": 0.42,
-    "hashtags": ["#osint", "#analysis"],
-    "comments": [
-      {
-        "commentId": "c-1",
-        "author": "Jane",
-        "text": "Great!",
-        "timestamp": "2024-05-01T12:40:00Z",
-        "sentiment": 0.6
-      }
-    ],
-    "url": "https://www.facebook.com/..."
-  }
+  "postId": "a7a2f...", 
+  "author": "John Doe",
+  "content": "Post content ...",
+  "timestamp": "2024-05-01T12:34:56Z",
+  "language": "en",
+  "sentiment": 0.42,
+  "hashtags": ["#osint", "#analysis"],
+  "entities": [{"text": "John", "label": "PERSON"}],
+  "translation": null,
+  "comments": [
+    {"text": "Great!", "author": "Jane", "timestamp": "2024-05-01T12:40:00Z"}
+  ],
+  "postType": "post",
+  "createdTime": "2024-05-01T12:34:56Z"
 }
 ```
 
@@ -127,7 +96,7 @@ Frontend: render graph visualization
 {
   "action": "scrapeByKeyword",
   "keyword": "osint",
-  "options": { "maxPosts": 50, "headless": true, "lang": "any" }
+  "options": { "maxPosts": 25 }
 }
 ```
 
@@ -146,28 +115,6 @@ Frontend: render graph visualization
     - `GET /api/network/link-analysis?url={url}`
   - Health
     - `GET /api/health`
-
-- Typical response (posts page):
-```json
-{
-  "content": [
-    {
-      "postId": "1234567890",
-      "author": "John Doe",
-      "content": "Post content ...",
-      "timestamp": "2024-05-01T12:34:56Z",
-      "language": "en",
-      "sentiment": 0.42,
-      "hashtags": ["#osint"],
-      "commentCount": 12
-    }
-  ],
-  "page": 0,
-  "size": 20,
-  "totalElements": 100,
-  "totalPages": 5
-}
-```
 
 ## Persistence Model (Neo4j)
 
@@ -203,11 +150,15 @@ MERGE (p)-[:MENTIONS_HASHTAG]->(t)
     - `SPRING_NEO4J_AUTHENTICATION_PASSWORD=neo4jpassword`
     - `SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092`
     - `SPRING_WEB_CORS_ALLOWED_ORIGINS=http://localhost:3000`
+  - `libretranslate` (optional translation), ports `5001:5000`
   - `scraper` (Python), env:
     - `KAFKA_BROKER=kafka:9092`
     - `KAFKA_SCRAPE_TOPIC=fbreaper-topic`
     - `KAFKA_COMMANDS_TOPIC=scraper-control`
-    - `LIBRETRANSLATE_URL=http://libretranslate:5001/translate`
+    - `LIBRETRANSLATE_URL=http://libretranslate:5000/translate`
+    - `HEADLESS=true`
+    - `DEFAULT_MAX_POSTS=10`
+    - persistent session mounted at `python_scraper/fb_session`
   - `frontend` (Nginx serving Vite build)
 
 - Frontend `.env`:
@@ -215,12 +166,15 @@ MERGE (p)-[:MENTIONS_HASHTAG]->(t)
 VITE_API_BASE_URL=http://localhost:8080/api
 ```
 
-- Scraper `.env`:
+- Scraper `.env` (for local runs outside Docker):
 ```env
 KAFKA_BROKER=localhost:9092
 KAFKA_SCRAPE_TOPIC=fbreaper-topic
 KAFKA_COMMANDS_TOPIC=scraper-control
 LIBRETRANSLATE_URL=http://localhost:5001/translate
+HEADLESS=true
+DEFAULT_MAX_POSTS=10
+FB_USER_DATA_DIR=fb_session
 ```
 
 - Nginx reverse proxy (in container):
@@ -228,6 +182,33 @@ LIBRETRANSLATE_URL=http://localhost:5001/translate
 location /api/ {
   proxy_pass http://backend:8080/api/;
 }
+```
+
+## First-time Facebook Login (Playwright)
+
+The scraper uses a persistent Chromium context stored in `python_scraper/fb_session`. To create a logged-in session:
+- Run the scraper non-headless once and log into Facebook.
+- The session will persist in `fb_session` volume and be reused headless thereafter.
+
+Docker example:
+```bash
+cd app
+# Start infra so Kafka is available
+docker compose up -d neo4j kafka libretranslate
+# Run scraper once interactively to login
+docker compose run --rm -e HEADLESS=false scraper python main.py
+```
+
+Local example:
+```bash
+cd app/python_scraper
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium
+python -m spacy download en_core_web_sm
+cp .env.example .env
+# set HEADLESS=false in .env for first login
+python main.py
 ```
 
 ## Local Development
@@ -239,12 +220,13 @@ docker compose up -d --build
 # Frontend: http://localhost:3000
 # Backend:  http://localhost:8080/api/health
 # Neo4j:    http://localhost:7474 (neo4j/neo4jpassword)
+# LibreTranslate: http://localhost:5001
 ```
 
 - Partial (infra only) + local services:
 ```bash
 cd app
-docker compose up -d neo4j kafka
+docker compose up -d neo4j kafka libretranslate
 ```
 
 - Backend (local):
@@ -284,18 +266,6 @@ npm run dev
 - Kafka tips:
   - Prefer keys by `postId` for partitioning
   - Use consumer groups in backend for scalability
-
-## Error Handling & Retries (Lifecycle)
-
-- Backend consumer: validate JSON, skip/bury malformed messages, log with context
-- Neo4j upserts: use MERGE to avoid duplicates; wrap transactional operations
-- Scraper:
-  - Playwright timeouts, backoff, human-like pacing
-  - Headless vs non-headless for debugging
-  - Persistent session in `python_scraper/fb_session`
-- Network:
-  - Kafka unreachable → scraper buffers or backs off; backend logs and continues
-  - Neo4j down → backend returns 5xx for dependent endpoints
 
 ## Security Notes
 
