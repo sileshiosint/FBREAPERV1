@@ -1,0 +1,8 @@
+playwright
+langdetect
+vaderSentiment
+spacy
+kafka-python
+aiokafka
+aiohttp
+python-dotenv
