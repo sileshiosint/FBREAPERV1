@@ -108,16 +108,16 @@ public class DataController {
             .max(String::compareTo)
             .orElse(null);
         
-        // Calculate total reactions (mock data for now)
-        int totalReactions = postCount * 15 + commentCount * 3; // Mock calculation
+        // Calculate basic real metrics
+        int totalReactions = 0; // Unknown without reaction model; keep 0 until implemented
         
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalPosts", postCount);
         stats.put("totalComments", commentCount);
         stats.put("totalReactions", totalReactions);
-        stats.put("activeScrapers", 1); // Mock data
-        stats.put("errorsToday", 0); // Mock data
-        stats.put("dataCollectedToday", postCount + commentCount); // Mock data
+        stats.put("activeScrapers", dataService.getAllPosts().isEmpty() ? 0 : 1);
+        stats.put("errorsToday", 0);
+        stats.put("dataCollectedToday", postCount + commentCount);
         
         return ResponseEntity.ok(stats);
     }

@@ -14,4 +14,10 @@ public interface CustomQueryRepository {
 
     @Query("MATCH (n)-[r]->(m) RETURN n, r, m LIMIT $limit")
     List<Map<String, Object>> getAllRelationships(int limit);
+
+    List<Map<String, Object>> getNetworkNodes(String keyword);
+
+    List<Map<String, Object>> getNetworkLinks(String keyword);
+
+    List<Map<String, Object>> findPostNeighborhood(String postId);
 }
