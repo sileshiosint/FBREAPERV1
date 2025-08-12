@@ -1,19 +1,23 @@
 import logging
 import asyncio
+import os
+from typing import Optional
 from playwright.async_api import async_playwright
 
 class FacebookScraper:
-    def __init__(self):
+    def __init__(self, headless: bool = True, user_data_dir: Optional[str] = None):
         # You may want to add logic to ensure user-data-dir is set for logged-in session
         self.browser = None
         self.context = None
+        self.headless = headless
+        self.user_data_dir = user_data_dir or os.getenv("FB_USER_DATA_DIR", "fb_session")
 
     async def _init_browser(self):
         playwright = await async_playwright().start()
         # Use a persistent context for an already logged-in session
         self.context = await playwright.chromium.launch_persistent_context(
-            user_data_dir="fb_session",
-            headless=True,
+            user_data_dir=self.user_data_dir,
+            headless=self.headless,
             slow_mo=0
         )
         self.browser = self.context
@@ -37,7 +41,6 @@ class FacebookScraper:
 
         # Infinite scroll to load posts
         posts_data = []
-        last_height = 0
         for _ in range(5):  # Spread across multiple scrolls
             await page.mouse.wheel(0, 1000)
             await asyncio.sleep(2)

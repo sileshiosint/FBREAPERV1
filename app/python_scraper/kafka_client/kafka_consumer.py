@@ -20,7 +20,7 @@ class KafkaConsumerClient:
         try:
             async for msg in consumer:
                 logging.info(f"Received command: {msg.value}")
-                    # Java backend sends commands as JSON strings
+                # Java backend sends commands as JSON strings
                 yield msg.value
         finally:
             await consumer.stop()
